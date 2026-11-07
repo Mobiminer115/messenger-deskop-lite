@@ -1,0 +1,62 @@
+name: Build Messenger Desktop
+
+on:
+  # Chạy tay: tab Actions -> "Build Messenger Desktop" -> Run workflow
+  workflow_dispatch:
+  # Hoặc đẩy tag dạng v0.1.0 lên để tự build
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Một file .dmg chạy được cả Mac chip Apple (M1/M2/M3...) lẫn Mac Intel
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+            rust_targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+          - platform: windows-latest
+            args: ""
+            rust_targets: ""
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install Tauri CLI
+        run: npm install
+
+      # Tạo đầy đủ icon (.ico, .icns, .png) từ app-icon.png.
+      # Muốn đổi icon: thay file app-icon.png (vuông, >= 1024x1024) rồi push lại.
+      - name: Generate icons
+        run: npx tauri icon app-icon.png
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: app-v__VERSION__
+          releaseName: "Messenger Desktop v__VERSION__"
+          releaseBody: "Tải file cài đặt bên dưới: .dmg cho Mac, .exe/.msi cho Windows."
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
